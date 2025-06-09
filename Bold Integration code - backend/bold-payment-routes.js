@@ -1,8 +1,11 @@
-const express = require('express');
+import express from 'express';
+import AuthMiddleware from '../middlewares/auth.middlewares.js';
+import GlobalMiddlewares from '../middlewares/global.middlewares.js';
+import BoldTerminalController from '../controllers/boldTerminal.controller.js';
+
 const router = express.Router();
-const { authenticate } = require('../middlewares/auth.middleware');
-const { validateBody } = require('../middlewares/validation.middleware');
-const boldTerminalController = require('../controllers/boldTerminal.controller');
+const { authenticate } = AuthMiddleware;
+const { validateBody } = GlobalMiddlewares;
 
 /**
  * Bold Terminal Payment Routes
@@ -13,28 +16,21 @@ const boldTerminalController = require('../controllers/boldTerminal.controller')
 router.post(
   '/charge',
   authenticate,
-  validateBody({
-    order_id: 'required|string',
-    ticket_tier_id: 'required|string',
-    amount: 'required|number|min:1',
-    terminal_id: 'required|string',
-    event_id: 'string'
-  }),
-  boldTerminalController.createCharge
+  BoldTerminalController.createCharge
 );
 
 // Get charge status
 router.get(
   '/charge/:chargeId',
   authenticate,
-  boldTerminalController.getChargeStatus
+  BoldTerminalController.getChargeStatus
 );
 
 // Manually trigger reconciliation
 router.post(
   '/reconcile/:chargeId',
   authenticate,
-  boldTerminalController.reconcileCharge
+  BoldTerminalController.reconcileCharge
 );
 
-module.exports = router;
+export default router;

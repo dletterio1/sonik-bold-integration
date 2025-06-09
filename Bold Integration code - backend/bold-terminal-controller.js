@@ -1,5 +1,6 @@
-const createError = require('http-errors');
-const boldPaymentService = require('../services/boldPayment.service');
+import createError from 'http-errors';
+import BoldPaymentService from '../services/boldPayment.service.js';
+import GlobalUtils from '../utils/global.utils.js';
 
 class BoldTerminalController {
   /**
@@ -8,11 +9,11 @@ class BoldTerminalController {
    */
   async createCharge(req, res, next) {
     try {
-      const { order_id, ticket_tier_id, amount, terminal_id } = req.body;
+      const { transaction_id, ticket_tier_id, amount, terminal_id } = req.body;
       
       // Validate required fields
-      if (!order_id || !ticket_tier_id || !amount || !terminal_id) {
-        throw createError(400, 'Missing required fields: order_id, ticket_tier_id, amount, terminal_id');
+      if (!transaction_id || !ticket_tier_id || !amount || !terminal_id) {
+        throw createError(400, 'Missing required fields: transaction_id, ticket_tier_id, amount, terminal_id');
       }
       
       // Validate amount
@@ -21,8 +22,8 @@ class BoldTerminalController {
       }
       
       // Create charge
-      const charge = await boldPaymentService.createCharge({
-        orderId: order_id,
+      const charge = await BoldPaymentService.createCharge({
+        transactionId: transaction_id,
         ticketTierId: ticket_tier_id,
         amount,
         terminalId: terminal_id,
@@ -30,14 +31,17 @@ class BoldTerminalController {
           ipAddress: req.ip,
           userAgent: req.get('user-agent'),
           posClient: req.get('x-pos-client') || 'unknown',
-          eventId: req.body.event_id
+          _event: req.body.event_id
         }
       });
       
-      res.status(201).json({
-        success: true,
-        data: charge
-      });
+      res.status(201).json(
+        GlobalUtils.formatResponse(
+          charge,
+          'Charge created successfully',
+          { success: true }
+        )
+      );
       
     } catch (error) {
       next(error);
@@ -56,12 +60,15 @@ class BoldTerminalController {
         throw createError(400, 'Charge ID is required');
       }
       
-      const charge = await boldPaymentService.getChargeStatus(chargeId);
+      const charge = await BoldPaymentService.getChargeStatus(chargeId);
       
-      res.json({
-        success: true,
-        data: charge
-      });
+      res.json(
+        GlobalUtils.formatResponse(
+          charge,
+          'Charge status retrieved successfully',
+          { success: true }
+        )
+      );
       
     } catch (error) {
       next(error);
@@ -81,13 +88,15 @@ class BoldTerminalController {
       }
       
       // Get charge and force poll
-      const charge = await boldPaymentService.getChargeStatus(chargeId);
+      const charge = await BoldPaymentService.getChargeStatus(chargeId);
       
-      res.json({
-        success: true,
-        message: 'Reconciliation triggered',
-        data: charge
-      });
+      res.json(
+        GlobalUtils.formatResponse(
+          charge,
+          'Reconciliation triggered successfully',
+          { success: true }
+        )
+      );
       
     } catch (error) {
       next(error);
@@ -95,4 +104,4 @@ class BoldTerminalController {
   }
 }
 
-module.exports = new BoldTerminalController();
+export default new BoldTerminalController();

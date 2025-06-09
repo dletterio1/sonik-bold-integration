@@ -1,9 +1,9 @@
-const axios = require('axios');
-const crypto = require('crypto');
-const createError = require('http-errors');
-const BoldTerminalCharge = require('../models/BoldTerminalCharge');
-const redisService = require('./redis.service');
-const eventService = require('./event.service');
+import axios from 'axios';
+import crypto from 'crypto';
+import createError from 'http-errors';
+import BoldTerminalCharge from '../models/BoldTerminalCharge.model.js';
+import RedisService from './redis.service.js';
+import EventService from './event.service.js';
 
 class BoldPaymentService {
   constructor() {
@@ -47,7 +47,7 @@ class BoldPaymentService {
     const cacheKey = 'bold:token:access';
     
     // Check cached token
-    const cachedToken = await redisService.get(cacheKey);
+    const cachedToken = await RedisService.get(cacheKey);
     if (cachedToken) {
       return cachedToken;
     }
@@ -63,7 +63,7 @@ class BoldPaymentService {
       const { access_token, expires_in } = response.data;
       
       // Cache token with TTL (subtract 60 seconds for safety)
-      await redisService.setex(cacheKey, expires_in - 60, access_token);
+      await RedisService.setex(cacheKey, expires_in - 60, access_token);
       
       return access_token;
     } catch (error) {
@@ -75,10 +75,10 @@ class BoldPaymentService {
   /**
    * Create a charge on Bold terminal
    */
-  async createCharge({ orderId, ticketTierId, amount, terminalId, metadata }) {
+  async createCharge({ transactionId, ticketTierId, amount, terminalId, metadata }) {
     // Check idempotency
-    const idempotencyKey = `bold:idempotency:${orderId}:${amount}`;
-    const existingChargeId = await redisService.get(idempotencyKey);
+    const idempotencyKey = `bold:idempotency:${transactionId}:${amount}`;
+    const existingChargeId = await RedisService.get(idempotencyKey);
     
     if (existingChargeId) {
       const existingCharge = await BoldTerminalCharge.findOne({ chargeId: existingChargeId });
@@ -91,8 +91,8 @@ class BoldPaymentService {
     const chargeId = BoldTerminalCharge.generateChargeId();
     const charge = new BoldTerminalCharge({
       chargeId,
-      orderId,
-      ticketTierId,
+      _transaction: transactionId,
+      _tickettier: ticketTierId,
       amount,
       terminalId,
       status: 'pending',
@@ -107,7 +107,7 @@ class BoldPaymentService {
     await charge.save();
     
     // Set idempotency key with 5 minute TTL
-    await redisService.setex(idempotencyKey, 300, chargeId);
+    await RedisService.setex(idempotencyKey, 300, chargeId);
     
     try {
       // Get access token
@@ -119,9 +119,9 @@ class BoldPaymentService {
         currency: 'COP',
         terminal_id: terminalId,
         reference_id: chargeId,
-        description: `Order ${orderId}`,
+        description: `Transaction ${transactionId}`,
         metadata: {
-          order_id: orderId.toString(),
+          transaction_id: transactionId.toString(),
           ticket_tier_id: ticketTierId.toString(),
           charge_id: chargeId
         }
@@ -136,9 +136,9 @@ class BoldPaymentService {
       await charge.save();
       
       // Emit event
-      await eventService.emit('payment.terminal.initiated', {
+      await EventService.emit('payment.terminal.initiated', {
         chargeId,
-        orderId,
+        transactionId,
         amount,
         terminalId,
         boldTransactionId: boldResponse.data.id
@@ -290,10 +290,10 @@ class BoldPaymentService {
     
     // Emit appropriate event
     const eventName = `payment.terminal.${newStatus}`;
-    await eventService.emit(eventName, {
+    await EventService.emit(eventName, {
       chargeId: charge.chargeId,
-      orderId: charge.orderId,
-      ticketTierId: charge.ticketTierId,
+      transactionId: charge._transaction,
+      ticketTierId: charge._tickettier,
       amount: charge.amount,
       terminalId: charge.terminalId,
       status: newStatus,
@@ -315,9 +315,9 @@ class BoldPaymentService {
         charge.reconciliation.reconciled = true;
         await charge.save();
         
-        await eventService.emit('payment.terminal.timeout', {
+        await EventService.emit('payment.terminal.timeout', {
           chargeId: charge.chargeId,
-          orderId: charge.orderId,
+          transactionId: charge._transaction,
           amount: charge.amount,
           terminalId: charge.terminalId
         });
@@ -428,4 +428,5 @@ class BoldPaymentService {
   }
 }
 
-module.exports = new BoldPaymentService();
+const boldPaymentService = new BoldPaymentService();
+export default boldPaymentService;

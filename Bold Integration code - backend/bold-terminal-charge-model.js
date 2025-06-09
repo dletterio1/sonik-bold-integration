@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const BoldTerminalChargeSchema = new mongoose.Schema({
   // Internal charge ID
@@ -9,16 +9,16 @@ const BoldTerminalChargeSchema = new mongoose.Schema({
     index: true
   },
   
-  // Reference to existing order
-  orderId: {
+  // Reference to existing transaction (Sonik uses TicketTransaction, not Order)
+  _transaction: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Order',
+    ref: 'TicketTransaction',
     required: true,
     index: true
   },
   
   // Reference to ticket tier
-  ticketTierId: {
+  _tickettier: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TicketTier',
     required: true
@@ -112,7 +112,10 @@ const BoldTerminalChargeSchema = new mongoose.Schema({
     ipAddress: String,
     userAgent: String,
     posClient: String, // Which POS client initiated (scanner, kiosk, etc)
-    eventId: mongoose.Schema.Types.ObjectId
+    _event: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event'
+    }
   }
   
 }, {
@@ -120,7 +123,7 @@ const BoldTerminalChargeSchema = new mongoose.Schema({
 });
 
 // Compound indexes for performance
-BoldTerminalChargeSchema.index({ orderId: 1, status: 1 });
+BoldTerminalChargeSchema.index({ _transaction: 1, status: 1 });
 BoldTerminalChargeSchema.index({ createdAt: 1, status: 1 }); // For reconciliation queries
 BoldTerminalChargeSchema.index({ 'reconciliation.reconciled': 1, createdAt: 1 });
 
@@ -174,4 +177,4 @@ BoldTerminalChargeSchema.statics.findPendingForReconciliation = function() {
   });
 };
 
-module.exports = mongoose.model('BoldTerminalCharge', BoldTerminalChargeSchema);
+export default mongoose.model('BoldTerminalCharge', BoldTerminalChargeSchema);

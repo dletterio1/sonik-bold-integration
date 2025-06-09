@@ -1,20 +1,20 @@
 // src/services/pos.service.js
-import { apiClient } from '../lib/https';
+import https from '../lib/https.js';
 
 class POSService {
-  async getPendingOrders(eventId) {
+  async getPendingTransactions(eventId) {
     try {
-      const response = await apiClient.get(`/scanner/pos/orders/${eventId}`);
+      const response = await https.get(`/api/v1/events/${eventId}/transactions?status=pending`);
       return response.data.data;
     } catch (error) {
-      console.error('Error fetching pending orders:', error);
+      console.error('Error fetching pending transactions:', error);
       throw error;
     }
   }
 
   async getDoorSalesTicketTiers(eventId) {
     try {
-      const response = await apiClient.get(`/scanner/pos/ticket-tiers/${eventId}`);
+      const response = await https.get(`/api/v1/events/${eventId}/ticket-tiers?door_sales=true`);
       return response.data.data;
     } catch (error) {
       console.error('Error fetching door sales tiers:', error);
@@ -22,10 +22,10 @@ class POSService {
     }
   }
 
-  async createCharge({ orderId, terminalId, eventId }) {
+  async createCharge({ transactionId, terminalId, eventId }) {
     try {
-      const response = await apiClient.post('/scanner/pos/charge', {
-        order_id: orderId,
+      const response = await https.post('/api/v1/payments/bold-terminal/charge', {
+        transaction_id: transactionId,
         terminal_id: terminalId,
         event_id: eventId
       });
@@ -38,7 +38,7 @@ class POSService {
 
   async getChargeStatus(chargeId) {
     try {
-      const response = await apiClient.get(`/scanner/pos/charge/${chargeId}`);
+      const response = await https.get(`/api/v1/payments/bold-terminal/charge/${chargeId}`);
       return response.data.data;
     } catch (error) {
       console.error('Error getting charge status:', error);

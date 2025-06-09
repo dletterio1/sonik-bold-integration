@@ -2,10 +2,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { Settings } from 'lucide-react';
 import OrderCard from '../components/scanner/OrderCard';
 import TicketTierModal from '../components/scanner/TicketTierModal';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
+import SettingsModal from '../components/SettingsModal';
 import { posService } from '../services/pos.service';
 import { formatCurrency } from '../utils/format';
 
@@ -19,6 +21,8 @@ const POSScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showTierModal, setShowTierModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showNewSale, setShowNewSale] = useState(false);
   const [ticketTiers, setTicketTiers] = useState([]);
   const [processingOrders, setProcessingOrders] = useState(new Set());
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -76,8 +80,9 @@ const POSScreen = () => {
     try {
       if (isRefresh) setRefreshing(true);
       
-      const result = await posService.getPendingOrders(eventId);
-      setOrders(result.orders);
+      // Updated to use Sonik API endpoint for all orders by event
+      const result = await posService.getAllOrdersByEvent(eventId);
+      setOrders(result.data);
       
       // Process any offline queue if we're online
       if (navigator.onLine) {
@@ -120,21 +125,38 @@ const POSScreen = () => {
     toast.error('Connection lost - Working offline', { position: 'top-center' });
   };
   
+  // Clean terminal ID display (remove Android_ and > characters)
+  const cleanTerminalId = (terminalId) => {
+    if (!terminalId) return '';
+    return terminalId.replace(/^Android_|>/g, '').trim();
+  };
+
   const handleChargePress = (order) => {
     if (!terminalId) {
-      toast.error('Terminal not configured. Please configure in Settings.', {
+      toast.error('Terminal no configurado. Por favor configure en Configuración.', {
         duration: 4000,
         position: 'top-center'
       });
       return;
     }
     
-    if (processingOrders.has(order.id)) {
+    if (processingOrders.has(order._id)) {
       return;
     }
     
     setSelectedOrder(order);
     setShowTierModal(true);
+  };
+
+  const handleNewSale = () => {
+    if (!terminalId) {
+      toast.error('Terminal no configurado. Por favor configure en Configuración.', {
+        duration: 4000,
+        position: 'top-center'
+      });
+      return;
+    }
+    setShowNewSale(true);
   };
   
   const handleConfirmCharge = async () => {
@@ -143,10 +165,10 @@ const POSScreen = () => {
     setShowTierModal(false);
     
     // Add to processing set
-    setProcessingOrders(prev => new Set(prev).add(selectedOrder.id));
+    setProcessingOrders(prev => new Set(prev).add(selectedOrder._id));
     
     // Update order status locally to show processing
-    updateOrderLocally(selectedOrder.id, 'processing');
+    updateOrderLocally(selectedOrder._id, 'pending');
     
     try {
       if (isOffline) {
@@ -157,16 +179,17 @@ const POSScreen = () => {
           position: 'top-center'
         });
       } else {
-        // Process charge
-        const result = await posService.createCharge({
-          orderId: selectedOrder.id,
+        // Process charge using Sonik API
+        const result = await posService.createBoldCharge({
+          transactionId: selectedOrder._id,
           terminalId,
-          eventId
+          eventId,
+          amount: selectedOrder.priceBreakdown.total
         });
         
         if (result.chargeId) {
           // Start monitoring charge status
-          monitorChargeStatus(result.chargeId, selectedOrder.id);
+          monitorChargeStatus(result.chargeId, selectedOrder._id);
         }
       }
     } catch (error) {
@@ -182,17 +205,56 @@ const POSScreen = () => {
       try {
         const status = await posService.getChargeStatus(chargeId);
         
-        if (status.status === 'approved') {
-          updateOrderLocally(orderId, 'paid');
+        // Map Bold status to Sonik status
+        const mapBoldStatus = (boldStatus) => {
+          switch (boldStatus) {
+            case 'approved': return 'succeeded';
+            case 'declined': return 'declined';
+            case 'canceled': return 'canceled';
+            case 'failed': 
+            case 'timeout': 
+            case 'error': return 'failed';
+            default: return 'pending';
+          }
+        };
+
+        const sonikStatus = mapBoldStatus(status.status);
+        
+        if (sonikStatus === 'succeeded') {
+          updateOrderLocally(orderId, 'succeeded');
           removeFromProcessing(orderId);
           
-          toast.success('Payment Successful!', {
+          toast.success('¡Pago exitoso!', {
             duration: 3000,
             position: 'top-center',
             style: {
               background: '#10B981',
               color: '#fff',
             }
+          });
+        } else if (sonikStatus === 'declined') {
+          updateOrderLocally(orderId, 'declined');
+          removeFromProcessing(orderId);
+          
+          toast.error('Pago rechazado', {
+            duration: 3000,
+            position: 'top-center'
+          });
+        } else if (sonikStatus === 'canceled') {
+          updateOrderLocally(orderId, 'canceled');
+          removeFromProcessing(orderId);
+          
+          toast.info('Pago cancelado', {
+            duration: 3000,
+            position: 'top-center'
+          });
+        } else if (sonikStatus === 'failed') {
+          updateOrderLocally(orderId, 'failed');
+          removeFromProcessing(orderId);
+          
+          toast.error('Error en el pago', {
+            duration: 3000,
+            position: 'top-center'
           });
           
           // Clear monitor
@@ -283,12 +345,12 @@ const POSScreen = () => {
   const updateOrderLocally = (orderId, status, errorDetails = null) => {
     setOrders(prevOrders => 
       prevOrders.map(order => {
-        if (order.id === orderId) {
+        if (order._id === orderId) {
           return {
             ...order,
             status,
             errorDetails,
-            lastUpdated: new Date().toISOString()
+            updatedAt: new Date().toISOString()
           };
         }
         return order;
@@ -391,47 +453,108 @@ const POSScreen = () => {
         </div>
       )}
       
-      <div className="px-4 py-4 flex items-center justify-between border-b border-gray-800">
-        <h2 className="text-xl font-semibold text-white">Live Orders</h2>
-        <button 
-          className="text-white p-2 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          {refreshing ? <LoadingSpinner size="small" /> : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      {/* Header */}
+      <div className="bg-gray-800 p-4 border-b border-gray-700">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 max-w-[65%]">
+            <h1 className="text-xl font-bold text-white">Terminal POS</h1>
+            <p className="text-gray-400 text-sm">Event ID: {eventId}</p>
+          </div>
+          
+          {/* Header Controls */}
+          <div className="flex items-center gap-4">
+            {/* Terminal Status */}
+            {terminalId ? (
+              <div className="flex items-center gap-2 bg-green-900/50 px-3 py-2 rounded-lg border border-green-500/30">
+                <span className="text-green-400 text-sm font-medium">
+                  {cleanTerminalId(terminalId)}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-red-600 px-3 py-2 rounded-lg border border-red-500">
+                <span className="text-white text-sm font-medium">Terminal no asignado</span>
+              </div>
+            )}
+            
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors disabled:opacity-50"
+              title="Actualizar datos"
+            >
+              {refreshing ? <LoadingSpinner size="small" /> : (
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              )}
+            </button>
+
+            {/* Settings Button */}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              title="Configuración"
+            >
+              <Settings className="h-4 w-4 text-white" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-semibold text-white">Órdenes</h2>
+          {/* New Sale Button */}
+          <button
+            onClick={handleNewSale}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors"
+            style={{ background: "linear-gradient(to right, #F2EFFE, #CBBEFC)", color: "black" }}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-          )}
-        </button>
-      </div>
+            Nueva Venta
+          </button>
+        </div>
       
-      <div className="px-4 py-4 space-y-3">
-        {orders.length === 0 ? (
-          <EmptyState
-            icon="📋"
-            title="No pending orders"
-            message="Walk-up orders will appear here"
-          />
-        ) : (
-          orders.map(order => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              onCharge={() => handleChargePress(order)}
-              isProcessing={processingOrders.has(order.id)}
-              isOffline={isOffline}
+        {/* Orders List */}
+        <div className="space-y-3">
+          {orders.length === 0 ? (
+            <EmptyState
+              icon="📋"
+              title="No hay órdenes"
+              message="Todas las órdenes completadas y pendientes aparecerán aquí"
             />
-          ))
-        )}
+          ) : (
+            orders.map(order => (
+              <OrderCard
+                key={order._id}
+                order={order}
+                onCharge={() => handleChargePress(order)}
+                isProcessing={processingOrders.has(order._id)}
+                isOffline={isOffline}
+              />
+            ))
+          )}
+        </div>
       </div>
       
+      {/* Modals */}
       <TicketTierModal
         visible={showTierModal}
         order={selectedOrder}
         ticketTiers={ticketTiers}
         onConfirm={handleConfirmCharge}
         onCancel={() => setShowTierModal(false)}
+      />
+
+      <SettingsModal
+        visible={showSettings}
+        eventId={eventId}
+        onClose={() => setShowSettings(false)}
+        onTerminalUpdate={(newTerminalId) => setTerminalId(newTerminalId)}
       />
     </div>
   );

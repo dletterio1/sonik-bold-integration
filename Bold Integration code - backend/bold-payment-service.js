@@ -73,10 +73,11 @@ class BoldPaymentService {
   }
 
   /**
-   * Create a charge on Bold terminal
+   * Create a charge on Bold terminal for Sonik transaction
+   * Updated to work with Sonik TicketTransaction model
    */
-  async createCharge({ transactionId, ticketTierId, amount, terminalId, metadata }) {
-    // Check idempotency
+  async createCharge({ transactionId, amount, terminalId, metadata }) {
+    // Check idempotency using Sonik transaction ID
     const idempotencyKey = `bold:idempotency:${transactionId}:${amount}`;
     const existingChargeId = await RedisService.get(idempotencyKey);
     
@@ -87,20 +88,23 @@ class BoldPaymentService {
       }
     }
     
-    // Create charge record
+    // Create charge record aligned with Sonik model
     const chargeId = BoldTerminalCharge.generateChargeId();
     const charge = new BoldTerminalCharge({
       chargeId,
-      _transaction: transactionId,
-      _tickettier: ticketTierId,
+      _transaction: transactionId, // Sonik TicketTransaction._id
       amount,
       terminalId,
-      status: 'pending',
-      metadata,
+      status: 'pending', // Sonik status: pending
+      metadata: {
+        ...metadata,
+        processor: 'bold', // Mark as Bold processor
+        source: 'pos' // Mark as POS source
+      },
       statusHistory: [{
         status: 'pending',
         timestamp: new Date(),
-        reason: 'Charge initiated'
+        reason: 'Bold charge initiated for Sonik transaction'
       }]
     });
     
@@ -351,21 +355,24 @@ class BoldPaymentService {
   }
 
   /**
-   * Map Bold status to our status
+   * Map Bold status to Sonik transaction status
+   * Updated to align with Sonik TicketTransaction status constants
    */
   mapBoldStatus(boldStatus) {
     const statusMap = {
-      'pending': 'pending',
-      'processing': 'pending',
-      'approved': 'approved',
-      'declined': 'declined',
-      'failed': 'error',
-      'cancelled': 'cancelled',
-      'reversed': 'reversed',
-      'timeout': 'timeout'
+      'pending': 'pending',          // Sonik: pending
+      'processing': 'pending',       // Sonik: pending
+      'approved': 'succeeded',       // Sonik: succeeded
+      'declined': 'declined',        // Sonik: declined (NEW)
+      'failed': 'failed',            // Sonik: failed
+      'cancelled': 'canceled',       // Sonik: canceled (NEW) 
+      'canceled': 'canceled',        // Handle both spellings
+      'reversed': 'reversed',        // Sonik: reversed
+      'timeout': 'failed',           // Sonik: failed (timeout = technical failure)
+      'error': 'failed'              // Sonik: failed
     };
     
-    return statusMap[boldStatus.toLowerCase()] || 'error';
+    return statusMap[boldStatus.toLowerCase()] || 'failed';
   }
 
   /**

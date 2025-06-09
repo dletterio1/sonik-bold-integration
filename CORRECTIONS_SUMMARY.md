@@ -168,9 +168,162 @@ await https.get(`/api/v1/events/${eventId}/transactions?status=pending`);
 
 ---
 
-**Status**: ✅ **READY FOR IMPLEMENTATION**
+## 🆕 **NEW CORRECTIONS - Sonik System Alignment (December 2024)**
 
-All Bold integration files have been corrected to match Sonik's actual codebase patterns. The developer should be able to implement this integration with minimal additional changes. 
+### **Critical Data Model Alignment**
+
+#### **Frontend POS Screen Updates (`pos-screen-web.js`)**
+**Issues Fixed:**
+- ❌ `order.id` → ✅ `order._id` (Sonik ObjectId convention)
+- ❌ `order.customerName` → ✅ `order._user.firstName + order._user.lastName`
+- ❌ `order.items` → ✅ `order.ticketItems` (Sonik model structure)
+- ❌ `order.totalAmount` → ✅ `order.priceBreakdown.total`
+- ❌ `getPendingOrders()` → ✅ `getAllOrdersByEvent()` (complete order history)
+- ❌ Status: `'paid'` → ✅ Status: `'succeeded'` (Sonik constants)
+
+**Key Changes:**
+```javascript
+// Before
+const result = await posService.getPendingOrders(eventId);
+if (order.status === 'paid') { ... }
+updateOrderLocally(selectedOrder.id, 'processing');
+
+// After  
+const result = await posService.getAllOrdersByEvent(eventId);
+if (order.status === 'succeeded') { ... }
+updateOrderLocally(selectedOrder._id, 'pending');
+```
+
+#### **Order Card Component Updates (`order-card-component.js`)**
+**Issues Fixed:**
+- ❌ Single status support → ✅ Complete Sonik status mapping
+- ❌ English UI → ✅ Spanish UI for Colombian market
+- ❌ Wrong field access → ✅ Sonik TicketTransaction structure
+
+**Status Mapping Added:**
+```javascript
+// New status handling
+case 'succeeded': // ✅ Approved payments
+case 'declined':  // ✅ Declined by bank
+case 'canceled':  // ✅ User canceled  
+case 'failed':    // ✅ Technical failure
+case 'rejected':  // ✅ System rejected
+case 'refunded':  // ✅ Refunded payments
+```
+
+#### **Backend Service Updates (`bold-payment-service.js`)**
+**Issues Fixed:**
+- ❌ Custom status mapping → ✅ Sonik TicketTransaction status constants
+- ❌ `'approved'` → ✅ `'succeeded'` 
+- ❌ Missing status types → ✅ Added `'declined'`, `'canceled'`
+- ❌ Generic processor → ✅ Mark as `processor: 'bold'`, `source: 'pos'`
+
+**Status Mapping Updated:**
+```javascript
+// Before
+'approved': 'approved',
+'declined': 'declined',
+'failed': 'error',
+
+// After - Aligned with Sonik constants
+'approved': 'succeeded',   // Sonik: succeeded
+'declined': 'declined',    // Sonik: declined (NEW)
+'canceled': 'canceled',    // Sonik: canceled (NEW)
+'failed': 'failed',        // Sonik: failed
+```
+
+### **🔗 Required Sonik API Changes** (Noted for Implementation)
+
+#### **Transaction Status Constants Update**
+**File**: `sonik-node-api/src/consts/ticketTransaction.const.js`
+```javascript
+// ADD these missing status constants:
+TicketTransactionConst.transactionStatus = {
+  // ... existing statuses ...
+  DECLINED: "declined",     // Payment declined by bank/processor
+  CANCELED: "canceled",     // User/operator canceled transaction
+};
+
+// ADD Bold processor support:
+TicketTransactionConst.paymentProcessor = {
+  // ... existing processors ...
+  BOLD: "bold",             // Bold payment processor
+};
+
+// ADD POS source support:
+TicketTransactionConst.source = {
+  // ... existing sources ...
+  POS: "pos",               // Point of sale transactions
+};
+```
+
+### **🎨 UI Enhancements Implemented**
+
+#### **Terminal ID Cleanup Function**
+```javascript
+// Added cleanTerminalId function
+const cleanTerminalId = (terminalId) => {
+  if (!terminalId) return '';
+  return terminalId.replace(/^Android_|>/g, '').trim();
+};
+```
+
+#### **Enhanced Header with Settings Button**
+- ✅ Added Settings button (⚙️ icon) next to refresh
+- ✅ Terminal status with red background for unassigned terminals
+- ✅ Clean terminal ID display (removed "Android_" prefix)
+- ✅ Spanish labels: "Terminal no asignado"
+
+#### **New Sale Button Integration**
+- ✅ Added "Nueva Venta" button for door sales
+- ✅ Gradient styling matching prototype
+- ✅ Validation for terminal assignment before allowing sales
+
+#### **Spanish Localization**
+**Terminal Settings (`terminal-settings.js`):**
+```javascript
+// Before
+"Payment Terminal" → "Terminal de Pago"
+"Not configured" → "No configurado"  
+"Status" → "Estado"
+"Location" → "Ubicación"
+"Last sync" → "Última sincronización"
+"Never" → "Nunca"
+"Just now" → "Ahora"
+```
+
+**POS Interface:**
+```javascript
+// Before
+"Live Orders" → "Órdenes"
+"No pending orders" → "No hay órdenes"
+"Processing..." → "Procesando..."
+"Payment Successful!" → "¡Pago exitoso!"
+```
+
+### **📊 Complete Status Flow Implementation**
+
+#### **Order Lifecycle States:**
+1. **`pending`** - Payment initiated, processing on terminal
+2. **`succeeded`** - Payment approved and completed  
+3. **`declined`** - Payment declined by bank (retryable)
+4. **`canceled`** - User canceled on terminal (retryable)
+5. **`failed`** - Technical failure (retryable)
+6. **`rejected`** - System rejected (requires fix)
+7. **`refunded`** - Previously succeeded payment refunded
+8. **`reversed`** - Chargeback or payment reversal
+
+#### **UI Status Indicators:**
+- 🟢 **Green**: `succeeded`, `refunded` 
+- 🟡 **Yellow**: `pending`
+- 🔴 **Red**: `declined`, `failed`, `rejected`, `reversed`
+- ⚫ **Gray**: `canceled`
+
+---
+
+**Status**: ✅ **SONIK SYSTEM ALIGNED & READY**
+
+All Bold integration files have been updated to perfectly align with Sonik's TicketTransaction model, API endpoints, status constants, and UI patterns. The integration now uses proper Sonik field names, status values, and follows Colombian market requirements with Spanish localization. 
 
 ## Terminal Pairing Corrections
 

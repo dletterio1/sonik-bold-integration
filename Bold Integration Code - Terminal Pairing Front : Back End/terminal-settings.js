@@ -119,19 +119,19 @@ const TerminalSettings = ({ eventId }) => {
   };
 
   const formatLastSync = (date) => {
-    if (!date) return 'Never';
+    if (!date) return 'Nunca';
     
     const now = new Date();
     const lastCheck = new Date(date);
     const diffMinutes = Math.floor((now - lastCheck) / 60000);
     
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes === 1) return '1 minute ago';
-    if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+    if (diffMinutes < 1) return 'Ahora';
+    if (diffMinutes === 1) return 'Hace 1 minuto';
+    if (diffMinutes < 60) return `Hace ${diffMinutes} minutos`;
     
     const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours === 1) return '1 hour ago';
-    return `${diffHours} hours ago`;
+    if (diffHours === 1) return 'Hace 1 hora';
+    return `Hace ${diffHours} horas`;
   };
 
   if (loading) {
@@ -148,26 +148,26 @@ const TerminalSettings = ({ eventId }) => {
   return (
     <>
       <div className="bg-gray-800 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Payment Terminal</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">Terminal de Pago</h3>
         
         {!assignment ? (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-gray-400">Terminal:</span>
-              <span className="text-white">Not configured</span>
+              <span className="text-white">No configurado</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-gray-400">Status:</span>
+              <span className="text-gray-400">Estado:</span>
               <div className="flex items-center gap-2">
                 <span className="text-yellow-500">⚠️</span>
-                <span className="text-yellow-500">No terminal</span>
+                <span className="text-yellow-500">Sin terminal</span>
               </div>
             </div>
             <button
               onClick={() => setShowSelector(true)}
               className="w-full mt-4 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors"
             >
-              Configure Terminal
+              Configurar Terminal
             </button>
           </div>
         ) : (
@@ -179,18 +179,18 @@ const TerminalSettings = ({ eventId }) => {
             
             {assignment.location && (
               <div className="flex items-center justify-between">
-                <span className="text-gray-400">Location:</span>
+                <span className="text-gray-400">Ubicación:</span>
                 <span className="text-white">{assignment.location}</span>
               </div>
             )}
             
             <div className="flex items-center justify-between">
-              <span className="text-gray-400">Status:</span>
+              <span className="text-gray-400">Estado:</span>
               <TerminalStatusIndicator status={assignment.status || 'unknown'} />
             </div>
             
             <div className="flex items-center justify-between">
-              <span className="text-gray-400">Last sync:</span>
+              <span className="text-gray-400">Última sincronización:</span>
               <span className="text-gray-300 text-sm">
                 {formatLastSync(assignment.lastStatusCheck)}
               </span>

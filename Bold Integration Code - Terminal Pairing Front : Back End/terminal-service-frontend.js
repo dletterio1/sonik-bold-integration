@@ -1,28 +1,14 @@
-import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+import https from '../lib/https.js';
 
 class TerminalService {
   constructor() {
-    this.baseURL = `${API_BASE_URL}/scanner/terminal`;
-  }
-
-  // Get auth headers
-  getHeaders() {
-    const token = localStorage.getItem('authToken');
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
+    this.baseURL = '/api/v1/scanner/terminals';
   }
 
   // Get available terminals for event
   async getAvailableTerminals(eventId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/available/${eventId}`,
-        { headers: this.getHeaders() }
-      );
+      const response = await https.get(`${this.baseURL}/available/${eventId}`);
       return response.data.data;
     } catch (error) {
       console.error('Failed to get available terminals:', error);
@@ -33,11 +19,11 @@ class TerminalService {
   // Assign terminal to current user
   async assignTerminal(eventId, terminalId, location = '') {
     try {
-      const response = await axios.post(
-        `${this.baseURL}/assign`,
-        { eventId, terminalId, location },
-        { headers: this.getHeaders() }
-      );
+      const response = await https.post(`${this.baseURL}/assign`, {
+        event_id: eventId,
+        terminal_id: terminalId,
+        location
+      });
       return response.data.data;
     } catch (error) {
       console.error('Failed to assign terminal:', error);
@@ -48,10 +34,7 @@ class TerminalService {
   // Get current terminal assignment
   async getCurrentAssignment(eventId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/assignment/${eventId}`,
-        { headers: this.getHeaders() }
-      );
+      const response = await https.get(`${this.baseURL}/assignment/${eventId}`);
       return response.data.data;
     } catch (error) {
       console.error('Failed to get terminal assignment:', error);
@@ -62,10 +45,7 @@ class TerminalService {
   // Release terminal
   async releaseTerminal(eventId) {
     try {
-      const response = await axios.delete(
-        `${this.baseURL}/assignment/${eventId}`,
-        { headers: this.getHeaders() }
-      );
+      const response = await https.delete(`${this.baseURL}/assignment/${eventId}`);
       return response.data;
     } catch (error) {
       console.error('Failed to release terminal:', error);
@@ -76,10 +56,7 @@ class TerminalService {
   // Check terminal status
   async getTerminalStatus(terminalId) {
     try {
-      const response = await axios.get(
-        `${this.baseURL}/${terminalId}/status`,
-        { headers: this.getHeaders() }
-      );
+      const response = await https.get(`${this.baseURL}/${terminalId}/status`);
       return response.data.data;
     } catch (error) {
       console.error('Failed to get terminal status:', error);
@@ -90,16 +67,33 @@ class TerminalService {
   // Test terminal connection
   async testTerminalConnection(terminalId) {
     try {
-      const response = await axios.post(
-        `${this.baseURL}/${terminalId}/test`,
-        {},
-        { headers: this.getHeaders() }
-      );
+      const response = await https.post(`${this.baseURL}/${terminalId}/test`, {});
       return response.data.data;
     } catch (error) {
       console.error('Failed to test terminal:', error);
       throw error;
     }
+  }
+
+  // Get error message for display
+  getErrorMessage(error) {
+    if (error.response?.data?.message) {
+      return error.response.data.message;
+    }
+    
+    if (error.response?.status === 404) {
+      return 'Terminal not found or not available';
+    }
+    
+    if (error.response?.status === 409) {
+      return 'Terminal is already assigned to another user';
+    }
+    
+    if (error.response?.status === 403) {
+      return 'Access denied to this terminal';
+    }
+    
+    return error.message || 'An error occurred while processing your request';
   }
 }
 

@@ -1,86 +1,85 @@
-const express = require('express');
+import express from 'express';
+import AuthMiddleware from '../middlewares/auth.middlewares.js';
+import createError from 'http-errors';
+import TerminalAssignmentService from '../services/terminalAssignment.service.js';
+import GlobalUtils from '../utils/global.utils.js';
+
 const router = express.Router();
-const { authenticate } = require('../middlewares/auth.middleware');
-const { validateBody } = require('../middlewares/validation.middleware');
-const createError = require('http-errors');
-const terminalAssignmentService = require('../services/terminalAssignment.service');
+const { authenticate } = AuthMiddleware;
 
 /**
  * Scanner Terminal Routes
- * Base path: /api/v1/scanner/terminal
+ * Base path: /api/v1/scanner/terminals
  */
 
 // Get available terminals for event
 router.get('/available/:eventId', authenticate, async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     
-    const terminals = await terminalAssignmentService.getAvailableTerminals(userId, eventId);
+    const terminals = await TerminalAssignmentService.getAvailableTerminals(userId, eventId);
     
-    res.json({
-      success: true,
-      data: terminals
-    });
+    res.json(
+      GlobalUtils.formatResponse(
+        terminals,
+        'Available terminals retrieved successfully',
+        { success: true }
+      )
+    );
   } catch (error) {
     next(error);
   }
 });
 
 // Assign terminal to user
-router.post(
-  '/assign',
-  authenticate,
-  validateBody({
-    eventId: 'required|string',
-    terminalId: 'required|string',
-    location: 'string'
-  }),
-  async (req, res, next) => {
-    try {
-      const { eventId, terminalId, location } = req.body;
-      const userId = req.user.id;
-      
-      const assignment = await terminalAssignmentService.assignTerminal(
-        userId,
-        eventId,
-        terminalId,
-        location
-      );
-      
-      res.json({
-        success: true,
-        data: {
+router.post('/assign', authenticate, async (req, res, next) => {
+  try {
+    const { event_id, terminal_id, location } = req.body;
+    const userId = req.user._id;
+    
+    if (!event_id || !terminal_id) {
+      throw createError(400, 'event_id and terminal_id are required');
+    }
+    
+    const assignment = await TerminalAssignmentService.assignTerminal(
+      userId,
+      event_id,
+      terminal_id,
+      location
+    );
+    
+    res.json(
+      GlobalUtils.formatResponse(
+        {
           terminalId: assignment.terminalId,
           location: assignment.location,
           assignedAt: assignment.assignedAt
-        }
-      });
-    } catch (error) {
-      next(error);
-    }
+        },
+        'Terminal assigned successfully',
+        { success: true }
+      )
+    );
+  } catch (error) {
+    next(error);
   }
-);
+});
 
 // Get current terminal assignment
 router.get('/assignment/:eventId', authenticate, async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     
-    const assignment = await terminalAssignmentService.getCurrentAssignment(userId, eventId);
+    const assignment = await TerminalAssignmentService.getCurrentAssignment(userId, eventId);
     
-    if (!assignment) {
-      return res.json({
-        success: true,
-        data: null
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: assignment
-    });
+    res.json(
+      GlobalUtils.formatResponse(
+        assignment,
+        assignment ? 'Terminal assignment retrieved successfully' : 'No terminal assignment found',
+        { success: true }
+      )
+    );
   } catch (error) {
     next(error);
   }
@@ -90,14 +89,17 @@ router.get('/assignment/:eventId', authenticate, async (req, res, next) => {
 router.delete('/assignment/:eventId', authenticate, async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     
-    const result = await terminalAssignmentService.releaseTerminal(userId, eventId);
+    const result = await TerminalAssignmentService.releaseTerminal(userId, eventId);
     
-    res.json({
-      success: true,
-      message: result.message
-    });
+    res.json(
+      GlobalUtils.formatResponse(
+        null,
+        result.message,
+        { success: true }
+      )
+    );
   } catch (error) {
     next(error);
   }
@@ -108,16 +110,19 @@ router.get('/:terminalId/status', authenticate, async (req, res, next) => {
   try {
     const { terminalId } = req.params;
     
-    const status = await terminalAssignmentService.getTerminalStatus(terminalId);
+    const status = await TerminalAssignmentService.getTerminalStatus(terminalId);
     
-    res.json({
-      success: true,
-      data: {
-        terminalId,
-        status,
-        timestamp: new Date()
-      }
-    });
+    res.json(
+      GlobalUtils.formatResponse(
+        {
+          terminalId,
+          status,
+          timestamp: new Date()
+        },
+        'Terminal status retrieved successfully',
+        { success: true }
+      )
+    );
   } catch (error) {
     next(error);
   }
@@ -127,17 +132,20 @@ router.get('/:terminalId/status', authenticate, async (req, res, next) => {
 router.post('/:terminalId/test', authenticate, async (req, res, next) => {
   try {
     const { terminalId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user._id;
     
-    const result = await terminalAssignmentService.testTerminalConnection(userId, terminalId);
+    const result = await TerminalAssignmentService.testTerminalConnection(userId, terminalId);
     
-    res.json({
-      success: result.success,
-      data: result
-    });
+    res.json(
+      GlobalUtils.formatResponse(
+        result,
+        result.status === 'online' ? 'Terminal test successful' : 'Terminal test failed',
+        { success: result.status === 'online' }
+      )
+    );
   } catch (error) {
     next(error);
   }
 });
 
-module.exports = router;
+export default router;

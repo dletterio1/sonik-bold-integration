@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TerminalStatusIndicator from './TerminalStatusIndicator';
-import terminalService from '../../services/terminalService';
+import terminalService from '../services/terminal.service.js';
 import toast from 'react-hot-toast';
 
 const TerminalSelectorModal = ({ visible, eventId, onSelect, onCancel }) => {

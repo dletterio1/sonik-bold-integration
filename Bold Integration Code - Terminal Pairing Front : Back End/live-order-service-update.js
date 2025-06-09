@@ -1,153 +1,165 @@
-// Add these methods to your existing liveOrder.service.js
-
-const redisService = require('./redis.service');
-
-// Inside the liveOrderService class, add:
-
 /**
- * Check if terminal is available
+ * Additional methods to add to your existing liveOrder.service.js
+ * These methods support terminal status management and order processing
  */
-async isTerminalAvailable(terminalId) {
-  // Check terminal status in Redis
-  const statusKey = `terminal:status:${terminalId}`;
-  const busyKey = `terminal:busy:${terminalId}`;
-  
-  const isBusy = await redisService.get(busyKey);
-  if (isBusy) {
-    return false;
-  }
-  
-  // Check with Bold service
-  try {
-    const status = await boldPaymentService.getTerminalStatus(terminalId);
-    return status === 'online';
-  } catch (error) {
-    console.error(`Failed to check terminal availability: ${terminalId}`, error);
-    return false;
-  }
-}
 
-/**
- * Set terminal status
- */
-async setTerminalStatus(terminalId, status, ttl = 30) {
-  const statusKey = `terminal:status:${terminalId}`;
-  
-  if (status === 'busy') {
+import RedisService from './redis.service.js';
+import BoldPaymentService from './boldPayment.service.js';
+import createError from 'http-errors';
+import TicketTransaction from '../models/TicketTransaction.model.js';
+import Ticket from '../models/Ticket.model.js';
+import EventService from './event.service.js';
+
+// Inside the liveOrderService class, add these methods:
+
+class LiveOrderServiceExtensions {
+  /**
+   * Check if terminal is available
+   */
+  async isTerminalAvailable(terminalId) {
+    // Check terminal status in Redis
+    const statusKey = `terminal:status:${terminalId}`;
     const busyKey = `terminal:busy:${terminalId}`;
-    await redisService.setex(busyKey, ttl, '1');
-  } else if (status === 'online') {
-    const busyKey = `terminal:busy:${terminalId}`;
-    await redisService.del(busyKey);
-  }
-  
-  await redisService.setex(statusKey, ttl, status);
-}
-
-/**
- * Lock order for processing
- */
-async lockOrderForProcessing(orderId) {
-  const order = await Order.findById(orderId);
-  if (!order) {
-    throw createError(404, 'Order not found');
-  }
-  
-  if (order.paymentStatus !== 'pending') {
-    throw createError(409, 'Order is not in pending state');
-  }
-  
-  // Set order as processing
-  order.paymentStatus = 'processing';
-  await order.save();
-  
-  // Set lock in Redis with 2 minute TTL
-  const lockKey = `order:lock:${orderId}`;
-  await redisService.setex(lockKey, 120, 'processing');
-  
-  return order;
-}
-
-/**
- * Update order payment status after Bold webhook
- */
-async updateOrderPaymentStatus(orderId, status, paymentDetails = {}) {
-  const order = await Order.findById(orderId);
-  if (!order) {
-    throw createError(404, 'Order not found');
-  }
-  
-  // Update order status
-  order.paymentStatus = status;
-  
-  if (status === 'paid') {
-    order.paidAt = new Date();
-    order.paymentMethod = paymentDetails.paymentMethod || 'terminal';
-    order.paymentDetails = {
-      ...order.paymentDetails,
-      ...paymentDetails
-    };
     
-    // Create tickets for the order
-    await this.createTicketsForOrder(orderId);
-  }
-  
-  await order.save();
-  
-  // Clear processing lock
-  const lockKey = `order:lock:${orderId}`;
-  await redisService.del(lockKey);
-  
-  // Emit event
-  await eventService.emit('order.payment.updated', {
-    orderId,
-    status,
-    paymentDetails
-  });
-  
-  return order;
-}
-
-/**
- * Create tickets after successful payment
- */
-async createTicketsForOrder(orderId) {
-  const order = await Order.findById(orderId)
-    .populate('ticketTier')
-    .populate('event');
+    const isBusy = await RedisService.get(busyKey);
+    if (isBusy) {
+      return false;
+    }
     
-  if (!order) {
-    throw createError(404, 'Order not found');
+    // Check with Bold service
+    try {
+      const status = await BoldPaymentService.getTerminalStatus(terminalId);
+      return status === 'online';
+    } catch (error) {
+      console.error(`Failed to check terminal availability: ${terminalId}`, error);
+      return false;
+    }
   }
-  
-  const tickets = [];
-  
-  for (let i = 0; i < order.quantity; i++) {
-    const ticket = await Ticket.create({
-      event: order.event._id,
-      ticketTier: order.ticketTier._id,
-      order: order._id,
-      user: order.user,
-      status: 'valid',
-      qrCode: await this.generateTicketQRCode(order._id, i),
-      purchaseDate: new Date()
+
+  /**
+   * Set terminal status
+   */
+  async setTerminalStatus(terminalId, status, ttl = 30) {
+    const statusKey = `terminal:status:${terminalId}`;
+    
+    if (status === 'busy') {
+      const busyKey = `terminal:busy:${terminalId}`;
+      await RedisService.setex(busyKey, ttl, '1');
+    } else if (status === 'online') {
+      const busyKey = `terminal:busy:${terminalId}`;
+      await RedisService.del(busyKey);
+    }
+    
+    await RedisService.setex(statusKey, ttl, status);
+  }
+
+  /**
+   * Lock transaction for processing
+   */
+  async lockTransactionForProcessing(transactionId) {
+    const transaction = await TicketTransaction.findById(transactionId);
+    if (!transaction) {
+      throw createError(404, 'Transaction not found');
+    }
+    
+    if (transaction.paymentStatus !== 'pending') {
+      throw createError(409, 'Transaction is not in pending state');
+    }
+    
+    // Set transaction as processing
+    transaction.paymentStatus = 'processing';
+    await transaction.save();
+    
+    // Set lock in Redis with 2 minute TTL
+    const lockKey = `transaction:lock:${transactionId}`;
+    await RedisService.setex(lockKey, 120, 'processing');
+    
+    return transaction;
+  }
+
+  /**
+   * Update transaction payment status after Bold webhook
+   */
+  async updateTransactionPaymentStatus(transactionId, status, paymentDetails = {}) {
+    const transaction = await TicketTransaction.findById(transactionId);
+    if (!transaction) {
+      throw createError(404, 'Transaction not found');
+    }
+    
+    // Update transaction status
+    transaction.paymentStatus = status;
+    
+    if (status === 'paid') {
+      transaction.paidAt = new Date();
+      transaction.paymentMethod = paymentDetails.paymentMethod || 'terminal';
+      transaction.paymentDetails = {
+        ...transaction.paymentDetails,
+        ...paymentDetails
+      };
+      
+      // Create tickets for the transaction
+      await this.createTicketsForTransaction(transactionId);
+    }
+    
+    await transaction.save();
+    
+    // Clear processing lock
+    const lockKey = `transaction:lock:${transactionId}`;
+    await RedisService.del(lockKey);
+    
+    // Emit event
+    await EventService.emit('transaction.payment.updated', {
+      transactionId,
+      status,
+      paymentDetails
     });
     
-    tickets.push(ticket);
+    return transaction;
   }
-  
-  // Update order with ticket references
-  order.tickets = tickets.map(t => t._id);
-  await order.save();
-  
-  return tickets;
+
+  /**
+   * Create tickets after successful payment
+   */
+  async createTicketsForTransaction(transactionId) {
+    const transaction = await TicketTransaction.findById(transactionId)
+      .populate('_tickettier')
+      .populate('_event');
+      
+    if (!transaction) {
+      throw createError(404, 'Transaction not found');
+    }
+    
+    const tickets = [];
+    
+    for (let i = 0; i < transaction.quantity; i++) {
+      const ticket = await Ticket.create({
+        _event: transaction._event._id,
+        _tickettier: transaction._tickettier._id,
+        _transaction: transaction._id,
+        _user: transaction._user,
+        status: 'valid',
+        qrCode: await this.generateTicketQRCode(transaction._id, i),
+        purchaseDate: new Date()
+      });
+      
+      tickets.push(ticket);
+    }
+    
+    // Update transaction with ticket references
+    transaction.tickets = tickets.map(t => t._id);
+    await transaction.save();
+    
+    return tickets;
+  }
+
+  /**
+   * Generate unique QR code for ticket
+   */
+  async generateTicketQRCode(transactionId, index) {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substr(2, 9);
+    return `TKT-${transactionId}-${index}-${timestamp}-${random}`.toUpperCase();
+  }
 }
 
-/**
- * Generate unique QR code for ticket
- */
-async generateTicketQRCode(orderId, index) {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substr(2, 9);
-  return `TKT-${orderId}-${index}-${timestamp}-${random}`.toUpperCase();
-}
+export default LiveOrderServiceExtensions;

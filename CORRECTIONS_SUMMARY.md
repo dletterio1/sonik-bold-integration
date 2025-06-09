@@ -171,3 +171,118 @@ await https.get(`/api/v1/events/${eventId}/transactions?status=pending`);
 **Status**: ✅ **READY FOR IMPLEMENTATION**
 
 All Bold integration files have been corrected to match Sonik's actual codebase patterns. The developer should be able to implement this integration with minimal additional changes. 
+
+## Terminal Pairing Corrections
+
+### 1. terminal-assignment-model.js
+
+**Issues Fixed:**
+- Changed CommonJS to ES6 imports
+- Updated field names to use underscore prefixes
+- Fixed model references
+
+**Before:**
+```javascript
+const mongoose = require('mongoose');
+organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' }
+userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+module.exports = mongoose.model('TerminalAssignment', TerminalAssignmentSchema);
+```
+
+**After:**
+```javascript
+import mongoose from 'mongoose';
+_organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' }
+_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+export default mongoose.model('TerminalAssignment', TerminalAssignmentSchema);
+```
+
+### 2. terminal-assignment-service.js
+
+**Issues Fixed:**
+- Updated imports to ES6 format
+- Fixed service references (redisService → RedisService)
+- Updated field names throughout
+- Fixed method calls
+
+**Before:**
+```javascript
+const redisService = require('./redis.service');
+await redisService.del(`terminal:assignment:${userId}:${eventId}`);
+```
+
+**After:**
+```javascript
+import RedisService from './redis.service.js';
+await RedisService.del(`terminal:assignment:${userId}:${eventId}`);
+```
+
+### 3. terminal-service-frontend.js
+
+**Issues Fixed:**
+- Fixed API client import
+- Updated endpoint paths
+- Simplified request structure
+
+**Before:**
+```javascript
+import axios from 'axios';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api/v1';
+```
+
+**After:**
+```javascript
+import https from '../lib/https.js';
+this.baseURL = '/api/v1/scanner/terminals';
+```
+
+### 4. terminal-scanner-routes.js
+
+**Issues Fixed:**
+- Updated imports to ES6 format
+- Fixed middleware import path
+- Updated response formatting
+- Changed field access pattern
+
+**Before:**
+```javascript
+const { authenticate } = require('../middlewares/auth.middleware');
+const userId = req.user.id;
+res.json({ success: true, data: terminals });
+```
+
+**After:**
+```javascript
+import AuthMiddleware from '../middlewares/auth.middlewares.js';
+const userId = req.user._id;
+res.json(GlobalUtils.formatResponse(terminals, 'Available terminals retrieved successfully'));
+```
+
+### 5. Service and Component Updates
+
+**bold-payment-service-update.js**: Added terminal status methods with proper class structure
+**live-order-service-update.js**: Updated to use TicketTransaction instead of Order model
+**organization-model-update.js**: Added terminal schema with proper field structure
+**terminal-settings.js**: Fixed import paths
+**terminal-selector-modal.js**: Fixed service import path
+**settings-page-update.js**: Updated component structure
+
+## Summary
+
+### Key Pattern Changes Applied:
+
+1. **Import System**: CommonJS → ES6 modules
+2. **Field Naming**: Standard names → underscore prefixes (`orderId` → `_transaction`)
+3. **Model References**: `Order` → `TicketTransaction`
+4. **Service Names**: `redisService` → `RedisService` (capitalized)
+5. **Middleware Path**: `auth.middleware` → `auth.middlewares.js`
+6. **API Endpoints**: Generic paths → Sonik-specific structure
+7. **Response Format**: Direct JSON → `GlobalUtils.formatResponse()`
+8. **User ID Access**: `req.user.id` → `req.user._id`
+
+### Files Corrected:
+- **Backend**: 4 core files + 3 service updates
+- **Frontend**: 1 core file + 3 component updates  
+- **Terminal Pairing**: 4 main files + 8 supporting files
+
+All files now follow Sonik's established patterns for imports, naming conventions, data structures, and response formatting. 

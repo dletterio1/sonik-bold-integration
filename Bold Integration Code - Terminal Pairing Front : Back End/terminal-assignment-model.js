@@ -1,21 +1,21 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const TerminalAssignmentSchema = new mongoose.Schema({
-  organizationId: {
+  _organization: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',
     required: true,
     index: true
   },
   
-  userId: {
+  _user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
     index: true
   },
   
-  eventId: {
+  _event: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Event',
     required: true,
@@ -58,8 +58,8 @@ const TerminalAssignmentSchema = new mongoose.Schema({
 });
 
 // Compound indexes for performance
-TerminalAssignmentSchema.index({ eventId: 1, terminalId: 1 });
-TerminalAssignmentSchema.index({ userId: 1, eventId: 1 });
+TerminalAssignmentSchema.index({ _event: 1, terminalId: 1 });
+TerminalAssignmentSchema.index({ _user: 1, _event: 1 });
 TerminalAssignmentSchema.index({ active: 1, assignedAt: 1 });
 
 // Instance methods
@@ -72,8 +72,8 @@ TerminalAssignmentSchema.methods.updateStatus = function(status) {
 // Static methods
 TerminalAssignmentSchema.statics.findActiveAssignment = function(userId, eventId) {
   return this.findOne({
-    userId,
-    eventId,
+    _user: userId,
+    _event: eventId,
     active: true
   });
 };
@@ -81,7 +81,7 @@ TerminalAssignmentSchema.statics.findActiveAssignment = function(userId, eventId
 TerminalAssignmentSchema.statics.findTerminalAssignment = function(terminalId, eventId) {
   return this.findOne({
     terminalId,
-    eventId,
+    _event: eventId,
     active: true
   });
 };
@@ -100,4 +100,4 @@ TerminalAssignmentSchema.statics.releaseOldAssignments = function() {
   );
 };
 
-module.exports = mongoose.model('TerminalAssignment', TerminalAssignmentSchema);
+export default mongoose.model('TerminalAssignment', TerminalAssignmentSchema);

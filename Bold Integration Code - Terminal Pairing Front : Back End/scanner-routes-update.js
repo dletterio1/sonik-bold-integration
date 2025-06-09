@@ -1,8 +1,14 @@
-// In your main scanner.routes.js file, add this at the top with other imports:
-const terminalRoutes = require('./scanner.terminal.routes');
+/**
+ * Add this route registration to your main scanner routes file
+ * This integrates the terminal assignment routes
+ */
 
-// Then add this line to include the terminal routes:
-router.use('/terminal', terminalRoutes);
+import terminalRoutes from './terminal-scanner-routes.js';
+
+// Add this line to your scanner routes registration:
+// app.use('/api/v1/scanner/terminals', terminalRoutes);
+
+export { terminalRoutes };
 
 // This will make terminal endpoints available at:
 // /api/v1/scanner/terminal/available/:eventId

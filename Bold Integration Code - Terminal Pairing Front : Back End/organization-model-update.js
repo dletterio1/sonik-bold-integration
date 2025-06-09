@@ -1,50 +1,62 @@
-// Add this to the Organization schema in your existing Organization model
+/**
+ * Add this field to your existing Organization model
+ * This represents the terminals available to the organization
+ */
 
-// Inside the OrganizationSchema definition, add:
-terminals: [{
-  terminalId: {
-    type: String,
-    required: true
-  },
-  serialNumber: {
-    type: String,
-    required: true
-  },
-  location: {
-    type: String,
-    default: ''
-  },
-  addedAt: {
-    type: Date,
-    default: Date.now
-  },
-  active: {
-    type: Boolean,
-    default: true
-  }
-}],
-
-// Also add this instance method to the schema:
-OrganizationSchema.methods.addTerminal = function(terminalId, serialNumber, location) {
-  const existing = this.terminals.find(t => t.terminalId === terminalId);
-  if (existing) {
-    throw new Error('Terminal already exists in organization');
-  }
-  
-  this.terminals.push({
-    terminalId,
-    serialNumber,
-    location: location || '',
-    active: true
-  });
-  
-  return this.save();
+const terminalSchema = {
+  terminals: [{
+    terminalId: {
+      type: String,
+      required: true,
+      unique: true
+    },
+    serialNumber: {
+      type: String,
+      required: true,
+      unique: true
+    },
+    location: {
+      type: String,
+      default: ''
+    },
+    active: {
+      type: Boolean,
+      default: true
+    },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    lastActivity: {
+      type: Date,
+      default: Date.now
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    addedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 };
 
-OrganizationSchema.methods.removeTerminal = function(terminalId) {
-  const terminal = this.terminals.find(t => t.terminalId === terminalId);
-  if (terminal) {
-    terminal.active = false;
+// Add this method to Organization schema
+const organizationMethods = {
+  // Get active terminals for this organization
+  getActiveTerminals: function() {
+    return this.terminals.filter(terminal => terminal.active);
+  },
+  
+  // Check if terminal belongs to this organization
+  hasTerminal: function(terminalId) {
+    return this.terminals.some(terminal => 
+      terminal.terminalId === terminalId && terminal.active
+    );
   }
-  return this.save();
 };
+
+export { terminalSchema, organizationMethods };
